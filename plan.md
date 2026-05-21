@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # Project Plan: Automated Candidate Interview Feedback Tracker
 
 ## 1. Project Overview
