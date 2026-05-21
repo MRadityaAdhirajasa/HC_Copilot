@@ -34,16 +34,6 @@ class BackendError(Exception):
     pass
 
 
-def init_supabase_client() -> Optional[Any]:
-    try:
-        from supabase import create_client
-
-        return create_client(SUPABASE_URL, SUPABASE_KEY)
-    except Exception:
-        return None
-
-
-SUPABASE_CLIENT = init_supabase_client()
 
 
 def normalize_supabase_base(url: str) -> str:
@@ -65,20 +55,28 @@ def normalize_supabase_base(url: str) -> str:
 SUPABASE_BASE = normalize_supabase_base(SUPABASE_URL)
 
 
-def supabase_headers() -> Dict[str, str]:
-    return {
+def supabase_headers(prefer: str = "return=minimal") -> Dict[str, str]:
+    headers = {
         "apikey": SUPABASE_KEY,
         "Authorization": f"Bearer {SUPABASE_KEY}",
         "Content-Type": "application/json",
         "Accept": "application/json",
-        "Prefer": "return=minimal",
     }
+    if prefer:
+        headers["Prefer"] = prefer
+    return headers
+
+
+def _normalize_csv_value(value: Any) -> str:
+    if pd.isna(value):
+        return ""
+    return str(value).strip()
 
 
 def load_raw_csv(uploaded_file: Any) -> pd.DataFrame:
     if hasattr(uploaded_file, "seek"):
         uploaded_file.seek(0)
-    raw_df = pd.read_csv(uploaded_file)
+    raw_df = pd.read_csv(uploaded_file, dtype=str, keep_default_na=False, na_values=[None])
     if hasattr(uploaded_file, "seek"):
         uploaded_file.seek(0)
     return raw_df
@@ -87,36 +85,64 @@ def load_raw_csv(uploaded_file: Any) -> pd.DataFrame:
 def parse_uploaded_csv(uploaded_file: Any) -> pd.DataFrame:
     raw_df = load_raw_csv(uploaded_file)
     uploaded_cols = {col.strip(): col for col in raw_df.columns}
+    normalized_cols = {
+        re.sub(r"\s+", " ", col.strip().lower()): col
+        for col in uploaded_cols
+    }
 
-    full_name_col = uploaded_cols.get("Nama lengkap") or uploaded_cols.get("Full Name")
-    skills_col = uploaded_cols.get(
-        "Sebutkan skill teknis utama Anda (bahasa pemrograman, framework, tools)"
-    )
-    experience_col = uploaded_cols.get(
-        "Deskripsikan 1-2 pengalaman kerja atau proyek paling relevan yang pernah Anda kerjakan"
-    )
-    motivation_col = uploaded_cols.get(
-        "Mengapa Anda tertarik melamar posisi ini? Apa yang ingin Anda capai di sini?"
-    )
-    portfolio_col = uploaded_cols.get(
-        "Link CV atau Portfolio (GitHub, LinkedIn, Google Drive, dll)"
-    )
+    def find_column(candidates: list[str]) -> Optional[str]:
+        for candidate in candidates:
+            for normalized, original in normalized_cols.items():
+                if candidate in normalized:
+                    return original
+        return None
+
+    full_name_col = find_column(["nama lengkap", "full name", "nama"])
+    skills_col = find_column([
+        "sebutkan skill teknis utama",
+        "skill teknis utama",
+        "skills",
+        "skill",
+    ])
+    experience_col = find_column([
+        "deskripsikan 1-2 pengalaman kerja",
+        "pengalaman kerja",
+        "experience",
+        "project",
+    ])
+    motivation_col = find_column([
+        "mengapa anda tertarik",
+        "apa yang ingin anda capai",
+        "motivation",
+        "why",
+    ])
+    portfolio_col = find_column([
+        "link cv atau portfolio",
+        "github",
+        "linkedin",
+        "portfolio",
+    ])
+    email_col = find_column(["email"])
 
     if not full_name_col or not skills_col or not experience_col or not motivation_col:
+        available = ", ".join(sorted(uploaded_cols.keys()))
         raise BackendError(
-            "CSV tidak memiliki kolom yang diharapkan. Pastikan format CSV mengikuti template pelamar."
+            "CSV tidak memiliki kolom yang diharapkan. "
+            "Kolom yang tersedia: "
+            f"{available}."
         )
 
     records = []
     for idx, row in raw_df.iterrows():
-        name = str(row.get(full_name_col, "")).strip()
-        portfolio = str(row.get(portfolio_col, "")).strip() if portfolio_col else ""
-        skills = str(row.get(skills_col, "")).strip()
-        experience = str(row.get(experience_col, "")).strip()
-        motivation = str(row.get(motivation_col, "")).strip()
+        name = _normalize_csv_value(row.get(full_name_col, "")) or f"Candidate {idx + 1}"
+        portfolio = _normalize_csv_value(row.get(portfolio_col, "")) if portfolio_col else ""
+        skills = _normalize_csv_value(row.get(skills_col, ""))
+        experience = _normalize_csv_value(row.get(experience_col, ""))
+        motivation = _normalize_csv_value(row.get(motivation_col, ""))
 
-        summary_text = " ".join([skills, experience, motivation]).strip()
-        email = normalize_email(name, idx + 1)
+        summary_text = " ".join(filter(None, [skills, experience, motivation]))
+        email_value = _normalize_csv_value(row.get(email_col, "")) if email_col else ""
+        email = email_value or normalize_email(name, idx + 1)
 
         records.append(
             {
@@ -134,8 +160,9 @@ def parse_uploaded_csv(uploaded_file: Any) -> pd.DataFrame:
     return pd.DataFrame(records)
 
 
-def slugify(text: str) -> str:
-    sanitized = re.sub(r"[^a-z0-9]+", ".", text.lower())
+def slugify(text: Any) -> str:
+    normalized = str(text or "").lower()
+    sanitized = re.sub(r"[^a-z0-9]+", ".", normalized)
     return sanitized.strip(".") or "candidate"
 
 
@@ -164,7 +191,8 @@ def bulk_insert_candidates(df_pandas: pd.DataFrame) -> bool:
         return False
 
     url = f"{SUPABASE_BASE}/rest/v1/{CANDIDATE_TABLE}?on_conflict=email"
-    response = requests.post(url, headers=supabase_headers(), json=records)
+    headers = supabase_headers("resolution=ignore-duplicates,return=minimal")
+    response = requests.post(url, headers=headers, json=records)
     if response.status_code not in (200, 201, 204):
         raise BackendError(
             f"Gagal insert candidate: {response.status_code} - {response.text} - url={url}"
@@ -236,15 +264,66 @@ def build_prompt(candidate: Dict[str, Any]) -> str:
     )
 
 
-def extract_json_payload(response_text: str) -> Dict[str, Any]:
-    match = re.search(r"\{.*\}", response_text, re.DOTALL)
-    if not match:
+def _extract_first_json_object(text: str) -> str:
+    start = text.find("{")
+    if start == -1:
         raise BackendError("Response Gemini tidak berisi JSON yang valid.")
-    payload_text = match.group(0)
+
+    depth = 0
+    end = None
+    for index in range(start, len(text)):
+        char = text[index]
+        if char == "{":
+            depth += 1
+        elif char == "}":
+            depth -= 1
+            if depth == 0:
+                end = index
+                break
+
+    if end is None:
+        raise BackendError("Response Gemini tidak berisi JSON yang valid.")
+
+    return text[start : end + 1]
+
+
+def extract_json_payload(response_text: str) -> Dict[str, Any]:
+    payload_text = _extract_first_json_object(response_text)
     try:
-        return json.loads(payload_text)
+        payload = json.loads(payload_text)
     except json.JSONDecodeError as exc:
         raise BackendError(f"Gagal mengurai JSON dari response Gemini: {exc}")
+    return payload
+
+
+def validate_evaluation_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
+    required_keys = {"technical_score", "culture_score", "summary_reason", "status"}
+    if not required_keys.issubset(payload.keys()):
+        missing = required_keys - set(payload.keys())
+        raise BackendError(f"Payload Gemini tidak lengkap: missing {', '.join(sorted(missing))}")
+
+    technical_score = payload["technical_score"]
+    culture_score = payload["culture_score"]
+    summary_reason = payload["summary_reason"]
+    status = payload["status"]
+
+    if not isinstance(technical_score, int) or not 1 <= technical_score <= 100:
+        raise BackendError("technical_score harus integer antara 1 sampai 100.")
+    if not isinstance(culture_score, int) or not 1 <= culture_score <= 100:
+        raise BackendError("culture_score harus integer antara 1 sampai 100.")
+    if not isinstance(summary_reason, str) or not summary_reason.strip():
+        raise BackendError("summary_reason harus teks non-kosong.")
+    if status not in {"Strong Hire", "Hire", "No Go"}:
+        raise BackendError(
+            "status harus salah satu dari: 'Strong Hire', 'Hire', atau 'No Go'."
+        )
+
+    return {
+        "technical_score": technical_score,
+        "culture_score": culture_score,
+        "summary_reason": summary_reason.strip(),
+        "status": status,
+    }
 
 
 def call_gemini_api(candidate: Dict[str, Any]) -> Dict[str, Any]:
@@ -280,7 +359,8 @@ def call_gemini_api(candidate: Dict[str, Any]) -> Dict[str, Any]:
     if not candidate_text:
         raise BackendError("Gemini API merespons tanpa teks yang dapat diambil.")
 
-    return extract_json_payload(candidate_text)
+    payload = extract_json_payload(candidate_text)
+    return validate_evaluation_payload(payload)
 
 
 def evaluate_candidate_with_llm(candidate: Dict[str, Any]) -> Dict[str, Any]:

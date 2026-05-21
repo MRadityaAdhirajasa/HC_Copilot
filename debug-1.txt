@@ -1,0 +1,31 @@
+Debug Summary for branch debug-1
+
+1. Streamlit rerun compatibility
+   - Fixed `st.experimental_rerun()` to use `st.rerun()` when available.
+   - Added fallback to `st.experimental_rerun()` for older Streamlit versions.
+
+2. Gemini response handling
+   - Replaced greedy JSON regex with brace-matching JSON extraction.
+   - Added strict payload validation for Gemini output:
+     * technical_score: integer 1-100
+     * culture_score: integer 1-100
+     * summary_reason: non-empty string
+     * status: one of Strong Hire, Hire, No Go
+
+3. CSV parsing robustness
+   - Added tolerant header matching for alternate CSV column names.
+   - Normalized empty/missing values to avoid "nan" results.
+   - Supported optional email column and generated default emails when missing.
+
+4. Supabase fallback and UI behavior
+   - Improved fallback from Supabase to local session state when fetch fails.
+   - Added sidebar warning with Supabase fetch error details.
+   - Clarified seed behavior with distinct success messages for Supabase and local storage.
+
+5. Duplicate candidate handling
+   - Added Supabase `Prefer: resolution=ignore-duplicates,return=minimal` on bulk insert.
+   - This prevents 409 errors for already-uploaded candidate email values.
+
+6. Testing
+   - Added `tests/test_backend.py` with coverage for JSON parsing, payload validation, CSV parsing, dedupe logic, and Supabase headers.
+   - Verified with `python -m pytest -q`: 11 passed.
