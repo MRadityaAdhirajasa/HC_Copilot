@@ -1,0 +1,33 @@
+Junior/Mid Backend Software Engineer
+
+Job Summary:
+Kami mencari Backend Software Engineer level Junior sampai Mid yang berfokus pada pengembangan layanan backend yang handal dan scalable menggunakan Python dan/atau Node.js. Kandidat akan bekerja pada tim kecil untuk membangun API, integrasi database, dan pipeline data yang mendukung aplikasi web dan layanan internal.
+
+Tanggung Jawab Utama:
+- Mengembangkan dan memelihara RESTful API dan layanan backend menggunakan Python (FastAPI/Django/Flask) atau Node.js (Express/NestJS).
+- Mendesain schema database dan query PostgreSQL untuk performa, konsistensi data, dan kemudahan pemeliharaan.
+- Menulis unit test, integration test, dan dokumentasi API untuk memastikan kualitas kode.
+- Bekerja sama dengan tim frontend, DevOps, dan produk untuk menerjemahkan requirement bisnis menjadi solusi teknis.
+- Memecahkan masalah produksi, memperbaiki bug, serta mengoptimalkan performa aplikasi.
+- Ikut berpartisipasi dalam code review, perencanaan sprint, dan peningkatan proses engineering.
+
+Kualifikasi Minimal:
+- 1-3 tahun pengalaman kerja sebagai Backend Engineer atau posisi serupa.
+- Pengalaman praktis dengan Python dan/atau Node.js.
+- Menguasai SQL dan PostgreSQL, termasuk penulisan query kompleks dan optimasi indeks.
+- Paham prinsip RESTful API, autentikasi, dan pengelolaan state pada aplikasi backend.
+- Terbiasa menggunakan Git untuk version control dan mengikuti workflow kolaboratif.
+- Memiliki pola pikir testing-first dan kemampuan menulis kode yang dapat diuji.
+- Kemampuan membaca requirement, merancang solusi modular, dan mendokumentasikan desain teknis.
+
+Kemampuan Tambahan yang Diutamakan:
+- Pengalaman dengan asynchronous programming di Python (async/await) atau Node.js.
+- Familiar dengan containerization (Docker) dan deployment pada cloud atau platform hosting.
+- Pemahaman dasar tentang keamanan aplikasi backend, enkripsi data, dan kontrol akses.
+- Pengalaman bekerja dalam tim cross-functional yang agile dan cepat berubah.
+
+Budaya Kerja:
+- Proaktif, berinisiatif untuk mengajukan perbaikan teknis dan proses.
+- Komunikasi terbuka dan kolaboratif antar anggota tim.
+- Growth mindset, terus belajar dari feedback dan pengalaman.
+- Adaptif terhadap perubahan requirement dan siap berkontribusi dalam lingkungan kerja yang dinamis.

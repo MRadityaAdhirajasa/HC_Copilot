@@ -28,15 +28,18 @@ def set_local_candidates(records: list[dict]) -> None:
     st.session_state["local_candidates"] = records
 
 
-def load_candidates() -> list[dict]:
+def load_candidates() -> tuple[list[dict], str | None]:
     if SUPABASE_AVAILABLE:
         try:
             candidates = supabase_fetch_candidates()
             if candidates:
-                return candidates
-        except Exception:
-            pass
-    return get_local_candidates()
+                return candidates, None
+        except Exception as exc:
+            local_candidates = get_local_candidates()
+            return local_candidates, str(exc)
+
+    local_candidates = get_local_candidates()
+    return local_candidates, None
 
 
 def insert_local_candidates(records: list[dict]) -> None:
@@ -50,13 +53,16 @@ def seed_candidates(records: list[dict]) -> None:
     if SUPABASE_AVAILABLE:
         try:
             bulk_insert_candidates(pd.DataFrame(records))
+            st.success("Data kandidat berhasil dimasukkan ke Supabase.")
+            return
         except Exception as exc:
             st.error(f"Gagal memasukkan data ke Supabase: {exc}")
             insert_local_candidates(records)
+            st.info("Data kandidat disimpan lokal sementara di sesi ini.")
             return
-    else:
-        insert_local_candidates(records)
-    st.success("Data kandidat berhasil dimasukkan ke database.")
+
+    insert_local_candidates(records)
+    st.success("Data kandidat berhasil disimpan lokal sementara di sesi ini.")
 
 
 def update_candidate(candidate: dict, evaluation: dict) -> None:
@@ -122,7 +128,12 @@ def main() -> None:
         except Exception as exc:
             st.sidebar.error(f"Tidak dapat membaca CSV: {exc}")
 
-    candidates = load_candidates()
+    candidates, supabase_error = load_candidates()
+    if supabase_error:
+        st.sidebar.warning(
+            f"Gagal mengambil data Supabase: {supabase_error}. Menampilkan data lokal jika tersedia."
+        )
+
     total_count = len(candidates)
     scored_count = len([item for item in candidates if item.get("status") and item.get("status") != "Pending"])
     pending_count = len([item for item in candidates if item.get("status") == "Pending"])
@@ -173,7 +184,10 @@ def main() -> None:
                         evaluation = evaluate_candidate_with_llm(candidate)
                         update_candidate(candidate, evaluation)
                 st.success("Semua kandidat pending telah diproses.")
-                st.experimental_rerun()
+                if hasattr(st, "rerun"):
+                    st.rerun()
+                elif hasattr(st, "experimental_rerun"):
+                    st.experimental_rerun()
             st.dataframe(pd.DataFrame(pending_candidates), use_container_width=True)
         else:
             st.info("Tidak ada kandidat pending saat ini.")
